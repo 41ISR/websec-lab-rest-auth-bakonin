@@ -113,6 +113,71 @@ _Хостить работу не надо_
 
 ## Подсказки
 
+### Использование внешних ключей
+
+1. Включить поддержку внешних ключей
+
+```js
+const Database = require('better-sqlite3');
+const db = new Database('library.db');
+
+// Включаем поддержку внешних ключей
+db.pragma('foreign_keys = ON');
+```
+
+---
+
+2. Создать таблицы со связями
+
+Каждая книга принадлежит какому-то пользователю (автору, который её добавил).
+
+```js
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL
+  );
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+`);
+```
+
+---
+
+3. Вставка данных с учётом связи
+
+Пример добавления пользователя и книги, связанной с ним по внешнему ключу:
+
+```js
+// Добавляем пользователя
+const insertUser = db.prepare('INSERT INTO users (username, email) VALUES (?, ?)');
+const result = insertUser.run('Alice', 'alice@example.com');
+
+// Добавляем книгу, указывая id пользователя
+const insertBook = db.prepare('INSERT INTO books (title, author, user_id) VALUES (?, ?, ?)');
+insertBook.run('The Great Adventure', 'Alice Johnson', result.lastInsertRowid);
+
+// либо если юзер уже существует
+const userQuery = db.prepare('SELECT * FROM users WHERE id = ?')
+const user = userQuery.get(id)
+
+const book = db.prepare('INSERT INTO books (title, author, user_id) VALUES (?, ?, ?)');
+insertBook.run('The Great Adventure', 'Alice Johnson', user.id);
+```
+
+---
+
+Хочешь, я добавлю сюда раздел про выборку данных с `JOIN` и про поведение `ON DELETE CASCADE` (чтобы материал выглядел как законченная методичка для студентов)?
+
 ### Получение данных с join
 
 ```js
