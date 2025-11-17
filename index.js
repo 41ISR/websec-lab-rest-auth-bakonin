@@ -8,6 +8,8 @@ const jwt = require('jsonwebtoken')
 
 const app = express()
 
+const SECRET = "12345"
+
 function handleError(res, error) {
     console.error(error)
     res.status(401).json({ error: "401" })
@@ -55,6 +57,7 @@ app.post("/api/auth/register", (req, res) => {
 
 app.post("/api/auth/login", (req, res) => {
     try {
+
         const { email, password } = req.body
         const user = db.prepare(`SELECT * FROM users WHERE email = ?`).get(email)
 
@@ -65,27 +68,59 @@ app.post("/api/auth/login", (req, res) => {
 
         if (!valid)
             res.status(401).json({ error: "no valid data" })
-
+        
         const token = jwt.sign({ ...user }, SECRET, { expiresIn: '24h' })
         const { password: b, ...response } = user
         res.json({ "token": token, ...response })
     } catch (error) {
-        handleError(error)
+        handleError(res, error)
     }
 })
 
-app.get("/api/admin/users", (_, res) => {
+app.get("/api/admin/users", (req, res) => {
+    const authHeader = req.headers.authorization
+    const token = authHeader && authHeader.split(' ')[1]
+
+    const adminToken = "$2b$10$HbiZlm7tv8YwDeZ7Vu7ndO/ZenY/UPcR6ZowP/xiT/S8qwf1YEaTi"
+
+    if (token !== adminToken) {
+        return res.status(401).json({ error: 'Unauthorized' })
+    }
     try {
         const data = db.prepare("SELECT * FROM users").all()
         res.json(data)
     } catch (error) {
-        handleError(error)
+        handleError(res, error)
+    }
+})
+
+
+app.get("/api/admin/users/:id", (req, res) => {
+    const authHeader = req.headers.authorization
+    const token = authHeader && authHeader.split(' ')[1]
+
+    const adminToken = "$2b$10$HbiZlm7tv8YwDeZ7Vu7ndO/ZenY/UPcR6ZowP/xiT/S8qwf1YEaTi"
+
+    if (token !== adminToken) {
+        return res.status(401).json({ error: 'unauthorized' })
+    }
+    try {
+        const { id } = req.params
+        const data = db.prepare(`SELECT * FROM users WHERE id = ?`).get(id)
+        if (!data) {
+            return res.status(404).json({ error: 'user not found' })
+        }
+        res.json(data)
+    } catch (error) {
+        handleError(res, error)
     }
 })
 
 
 
+
 app.delete("/api/admin/users/:id", authMiddleware, (req, res) => {
+
     try {
         const { id } = req.params
         const query = db.prepare(`DELETE FROM users WHERE id = ?`)
@@ -95,12 +130,12 @@ app.delete("/api/admin/users/:id", authMiddleware, (req, res) => {
 
         res.status(200).json({ message: "Юзер успешно удален" })
     } catch (error) {
-        handleError(error)
+        handleError(res, error)
     }
 })
 
 
-app.patch("/users/:id", authMiddleware, (req, res) => {
+app.patch("/api/admin/users/:id", authMiddleware, (req, res) => {
     try {
         const { id } = req.params
         const { name } = req.body
@@ -110,6 +145,38 @@ app.patch("/users/:id", authMiddleware, (req, res) => {
     } catch (error) {
         console.error(error)
         res.status(401).json({ error: "401" })
+    }
+})
+
+
+app.get("api/books", (_, res) => {
+    try {
+        const data = db.prepare("SELECT * FROM books").all()
+        res.json(data)
+    } catch (error) {
+        handleError(error)
+    }
+
+})
+
+
+app.post("/api/books", authMiddleware, (req, res) => {
+    const { title, author } = req.body
+
+    try {
+        if (!title || !author) {
+            return res.status(400).json({ error: "Не хватает данных" })
+        }
+        const query = db.prepare(
+            `INSERT INTO books (title, author) VALUES (?, ?)`
+        )
+        const info = query.run(title, author)
+        const newUser = db
+            .prepare(`SELECT * FROM users WHERE ID = ?`)
+            .get(info.lastInsertRowid)
+        res.status(201).json(newUser)
+    } catch (error) {
+        handleError(res, error)
     }
 })
 
