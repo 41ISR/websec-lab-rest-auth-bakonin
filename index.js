@@ -77,14 +77,9 @@ app.post("/api/auth/login", (req, res) => {
     }
 })
 
-app.get("/api/admin/users", (req, res) => {
-    const authHeader = req.headers.authorization
-    const token = authHeader && authHeader.split(' ')[1]
-
-    const adminToken = "$2b$10$HbiZlm7tv8YwDeZ7Vu7ndO/ZenY/UPcR6ZowP/xiT/S8qwf1YEaTi"
-
-    if (token !== adminToken) {
-        return res.status(401).json({ error: 'Unauthorized' })
+app.get("/api/admin/users", authMiddleware, (req, res) => {
+    if (req.user.role !== "admin") {
+        return res.status(401).json({ error: 'unauthorized' })
     }
     try {
         const data = db.prepare("SELECT * FROM users").all()
@@ -95,13 +90,9 @@ app.get("/api/admin/users", (req, res) => {
 })
 
 
-app.get("/api/admin/users/:id", (req, res) => {
-    const authHeader = req.headers.authorization
-    const token = authHeader && authHeader.split(' ')[1]
-
-    const adminToken = "$2b$10$HbiZlm7tv8YwDeZ7Vu7ndO/ZenY/UPcR6ZowP/xiT/S8qwf1YEaTi"
-
-    if (token !== adminToken) {
+app.get("/api/admin/users/:id", authMiddleware, (req, res) => {
+    
+    if (req.user.role !== "admin") {
         return res.status(401).json({ error: 'unauthorized' })
     }
     try {
@@ -120,7 +111,10 @@ app.get("/api/admin/users/:id", (req, res) => {
 
 
 app.delete("/api/admin/users/:id", authMiddleware, (req, res) => {
-
+    
+    if (req.user.role !== "admin") {
+        return res.status(401).json({ error: 'unauthorized' })
+    }
     try {
         const { id } = req.params
         const query = db.prepare(`DELETE FROM users WHERE id = ?`)
@@ -149,7 +143,7 @@ app.patch("/api/admin/users/:id", authMiddleware, (req, res) => {
 })
 
 
-app.get("api/books", (_, res) => {
+app.get("/api/books", (_, res) => {
     try {
         const data = db.prepare("SELECT * FROM books").all()
         res.json(data)
@@ -161,19 +155,18 @@ app.get("api/books", (_, res) => {
 
 
 app.post("/api/books", authMiddleware, (req, res) => {
-    const { title, author } = req.body
+    const { title, author, year, genre, description} = req.body
 
     try {
-        if (!title || !author) {
+        if (!title || !author || !year || !genre || !description) {
             return res.status(400).json({ error: "Не хватает данных" })
         }
         const query = db.prepare(
-            `INSERT INTO books (title, author) VALUES (?, ?)`
+            `INSERT INTO books (title, author, year, genre, description, user_id) VALUES (?, ?, ?, ?, ?, ?)`
         )
-        const info = query.run(title, author)
-        const newUser = db
-            .prepare(`SELECT * FROM users WHERE ID = ?`)
-            .get(info.lastInsertRowid)
+        const info = query.run(title, author, year, genre, description, req.user.id)
+        const newUser = db.prepare(`SELECT * FROM books WHERE ID = ?`)
+        .get(info.lastInsertRowid)
         res.status(201).json(newUser)
     } catch (error) {
         handleError(res, error)
